@@ -70,7 +70,7 @@ clever addon create mysql-addon --plan s_sml myblogsql
 clever service link-addon myblogsql
 ```
 Ghost configuration file can't use direct environment variables.
-Set the following environment variables to connext your app to the database:
+Set the following environment variables to connect your app to the database:
 ```sh
 clever env set database__connection__host <ADDON_HOST>
 clever env set database__connection__user <ADDON_USER>
@@ -88,7 +88,7 @@ clever addon create cellar-addon --plan s_sml <cellar-app>
 clever service link-addon <cellar-app>
 ```
 
-On you CEllar S3 addon console, create a bucket for your blog.
+On you Cellar S3 addon console, create a bucket for your blog.
 
 Add the environment variables to configure Ghost with Cellar:
 ```sh
@@ -212,6 +212,7 @@ node_modules
 
 Initialize git, add files and push:
 ```sh
+git init
 git add clevercloud.sh package.json config.production.json content
 git commit -m "Initial commit"
 git remote add clever <CLEVER_GIT_URL>
