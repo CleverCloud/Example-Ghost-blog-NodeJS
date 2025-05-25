@@ -137,7 +137,7 @@ Set the public read access policy for your Cellar bucket ([documentation](https:
 
 ### 4. Create pre run hook
 
-In the project's root folder, create file `clevercloud-pre-run-hook.sh` :
+In the project's root folder, create file `.clevercloud-pre-run-hook.sh` :
 ```sh
 #!/bin/sh
 npm install -g ghost-cli 
@@ -149,7 +149,7 @@ cp ../config.production.json .
 mkdir -p ./content/adapters/storage
 cp -r ../content/adapters/storage/s3 content/adapters/storage/s3
 rm -R content/themes/source
-cp ../content/themes/source content/themes/
+cp -r ../content/themes/source content/themes/
 ```
 
 Grant execution permission to the script:
@@ -218,7 +218,7 @@ Before deploying your application on Clever Cloud, make sure to set the followin
 ```sh
 clever env set CC_NODE_BUILD_TOOL yarn2
 clever env set CC_NODE_VERSION 20
-clever env set CC_PRE_RUN_HOOK ".clevercloud-pre-run-build.sh"
+clever env set CC_PRE_RUN_HOOK "./.clevercloud-pre-run-build.sh"
 clever env set NODE_ENV production
 ```
 
