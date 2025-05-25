@@ -43,9 +43,10 @@ git init
 cd content/themes/
 git submodule add https://github.com/curiositry/mnml-ghost-theme
 git submodule add https://github.com/zutrinken/attila/
-wget https://github.com/TryGhost/Source/archive/refs/tags/<last-version>.zip -O source.zip #check and use the lastest version
-mkdir source
+wget https://github.com/TryGhost/Source/archive/refs/tags/<last-version>.zip -O source.zip #check and use the lastest version https://github.com/TryGhost/Source/releases
+rm -R source
 unzip source.zip -d temp
+mkdir source
 mv temp/*/* source/
 rm -R temp source.zip
 ```
@@ -58,6 +59,8 @@ cp -r ./node_modules/ghost-storage-adapter-s3 ./content/adapters/storage/s3
 ```
 
 ### 2. Create and configure Node application and MySQL
+
+User the [clever tools CLI](https://www.clever-cloud.com/developers/doc/cli/install)
 
 Create the Node.js app on Clever Cloud:
 ```sh
@@ -94,8 +97,9 @@ Add the environment variables to configure Ghost with Cellar:
 ```sh
 clever env set storage__s3__accessKeyId <CELLAR_ACCESS_KEY>
 clever env set storage__s3__secretAccessKey <CELLAR_SECRET_KEY>
+clever ens set storage__s3__assetHost <CELLAR_ADDON_HOST>
 clever env set storage__s3__bucket <your-bucket>
-clever env set storage__s3__region <CELLAR_REGION>
+clever env set storage__s3__region fr
 ```
 Set the public read access policy for your Cellar bucket ([documentation](https://www.clever-cloud.com/developers/doc/addons/cellar/#public-bucket-policy)) :
 ```json
@@ -150,7 +154,7 @@ cp ../content/themes/source content/themes/
 
 Grant execution permission to the script:
 ```sh
-chmod +x .clevercloud.sh
+sudo chmod +x clevercloud.sh
 ```
 
 ### 5. Configure Ghost
@@ -208,15 +212,39 @@ versions
 node_modules
 ```
 
-### 7. Deploy on Clever Cloud
+### 7. Set other environment variables for your application
+
+Before deploying your application on Clever Cloud, make sure to set the following environment variables:
+```sh
+clever env set CC_NODE_BUILD_TOOL yarn2
+clever env set CC_NODE_VERSION 20
+clever env set CC_PRE_RUN_HOOK ".clevercloud-pre-run-build.sh"
+clever env set NODE_ENV production
+```
+
+Optional: Configure email service
+
+Ghost allows you to configure an SMTP service for sending emails (such as invitations, password resets, etc.). You can set it up using the following environment variables:
+```sh
+clever env set mail__from "your-email@example.com"
+clever env set mail__options__service "your-mail-service" # e.g. Mailgun, Gmail, etc.
+clever env set mail__options__host "smtp.yourmail.com"
+clever env set mail__options__port "587"
+clever env set mail__options__secureConnection "false"
+clever env set mail__options__auth__user "your-smtp-username"
+clever env set mail__options__auth__pass "your-smtp-password"
+```
+> 💡 **Note**: These environment variables allow Ghost to connect to your email service automatically.  
+> For more details and supported options, see the [official Ghost SMTP configuration docs](https://ghost.org/docs/config/#mail).
+
+### 8. Deploy on Clever Cloud
 
 Initialize git, add files and push:
 ```sh
-git init
 git add clevercloud.sh package.json config.production.json content
 git commit -m "Initial commit"
 git remote add clever <CLEVER_GIT_URL>
-clever deploy
+git push
 ```
 
 ## More information
