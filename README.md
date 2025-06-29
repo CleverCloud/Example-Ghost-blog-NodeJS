@@ -146,6 +146,7 @@ cd ghost
 ghost install local 
 ghost stop
 cp ../config.production.json .
+npm install ghost-storage-adapter-s3
 mkdir -p ./content/adapters/storage
 cp -r ../content/adapters/storage/s3 content/adapters/storage/s3
 rm -R content/themes/source
