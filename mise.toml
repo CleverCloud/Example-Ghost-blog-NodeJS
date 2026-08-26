@@ -1,0 +1,56 @@
+[tools]
+node = "{{ env.CC_NODE_VERSION }}"
+
+[tools."http:ghost"]
+version = "{{ get_env(name='GHOST_VERSION', default='6.60.0') }}"
+url = "https://registry.npmjs.org/ghost/-/ghost-{{ version }}.tgz"
+strip_components = 1
+
+[env]
+database__client = "mysql"
+database__connection__host = "{{ env.MYSQL_ADDON_HOST }}"
+database__connection__port = "{{ env.MYSQL_ADDON_PORT }}"
+database__connection__user = "{{ env.MYSQL_ADDON_USER }}"
+database__connection__password = "{{ env.MYSQL_ADDON_PASSWORD }}"
+database__connection__database = "{{ env.MYSQL_ADDON_DB }}"
+logging__transports = '["stdout"]'
+paths__contentPath = "{{ env.APP_HOME }}/content"
+server__host = "0.0.0.0"
+server__port = "{{ env.PORT }}"
+storage__active = "S3Storage"
+storage__S3Storage__bucket = "{{ env.GHOST_BUCKET }}"
+storage__S3Storage__staticFileURLPrefix = "content/images"
+storage__S3Storage__cdnUrl = "https://{{ env.CELLAR_ADDON_HOST }}/{{ env.GHOST_BUCKET }}"
+storage__S3Storage__region = "default"
+storage__S3Storage__endpoint = "https://{{ env.CELLAR_ADDON_HOST }}"
+storage__S3Storage__forcePathStyle = "true"
+storage__S3Storage__accessKeyId = "{{ env.CELLAR_ADDON_KEY_ID }}"
+storage__S3Storage__secretAccessKey = "{{ env.CELLAR_ADDON_KEY_SECRET }}"
+
+# Multipart uploads start at 10 MiB; this threshold can be increased up to 5 GiB
+# Chunks can be increased from 5 MiB up to 5 GiB, with at most 10,000 per upload
+storage__S3Storage__multipartUploadThresholdBytes = "10485760"
+storage__S3Storage__multipartChunkSizeBytes = "5242880"
+storage__media__adapter = "S3Storage"
+storage__media__staticFileURLPrefix = "content/media"
+storage__files__adapter = "S3Storage"
+storage__files__staticFileURLPrefix = "content/files"
+
+[tasks.build]
+description = "Install Ghost and seed default content"
+run = '''
+set -euo pipefail
+mkdir ghost
+cp -a '{{ tools["http:ghost"].path }}/.' ghost/
+mv ghost/content ghost-default-content
+cd ghost
+corepack enable pnpm
+pnpm install --prod --frozen-lockfile
+mkdir -p "$APP_HOME/content"
+cp -a -n "$APP_HOME/ghost-default-content/." "$APP_HOME/content/"
+'''
+
+[tasks.run]
+description = "Start Ghost"
+dir = "ghost"
+run = "node index.js"

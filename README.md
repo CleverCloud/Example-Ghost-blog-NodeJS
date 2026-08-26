@@ -1,253 +1,180 @@
-# Ghost Blog Template on Clever Cloud
+# Ghost 6 on Clever Cloud
 
-This project is a template for a [Ghost blog](https://ghost.org) running on Node.js 20 and deployed on [Clever Cloud](https://clever-cloud.com).
+Deploy [Ghost](https://ghost.org/), an open source publishing platform for websites, memberships and newsletters, on Clever Cloud with the Linux runtime, [Mise](https://mise.jdx.dev/), MySQL, Cellar S3-compatible object storage and an FS Bucket.
 
-It is based on the [local installation](https://ghost.org/docs/install/local/) of Ghost, as well as its source code on [Github](https://github.com/TryGhost/Ghost/).
+This example was tested with Ghost `6.60.0`. MySQL stores publications, users and settings, Cellar stores uploaded media, and the FS Bucket persists themes and routing configuration uploaded from Ghost Admin.
 
-## What is Ghost?
+## Prerequisites
 
-Ghost is a modern, open-source publishing platform designed for professional bloggers, writers, and content creators. Built with Node.js, it offers a lightweight, fast, and flexible alternative to traditional CMS platforms. 
+- A [Clever Cloud account](https://console.clever-cloud.com/)
+- [Clever Tools](https://www.clever.cloud/developers/doc/cli/) configured for that account
+- [Git](https://git-scm.com/downloads)
+- [jq](https://jqlang.org/download/)
+- [s3cmd](https://s3tools.org/s3cmd) or another S3-compatible client
 
-Ghost provides a clean, distraction-free writing experience, powerful SEO features, and extensive customization options through themes and integrations. It is often used for personal blogs, newsletters, and online publications.
+## Prepare the repository
 
-## Prérequis
+Clone this repository:
 
-- **Node.js 20**
-- **MySQL**
-- **Cellar S3**
-- **Ghost-CLI**
-- **Clever Tools CLI** ([documentation](https://www.clever-cloud.com/developers/doc/cli/))
-- **Git**
-
-## Installation and configuration
-
-### 1. Initialize your project
-
-Create the project file and install locally Ghost:
-```sh
-# Create the project file
-mkdir myblog && cd myblog
-# Install Ghost-CLI
-npm install -g ghost-cli@latest
-nvm use 20 #to use node 20
-# Install Ghost
-ghost install local
-ghost stop
+```bash
+git clone https://github.com/CleverCloud/Example-Ghost-blog-NodeJS.git myGhost
+cd myGhost
 ```
 
-Remove the default theme and add custom theme submodules:
-```sh
-rm -r content/themes/casper
-cp -r current/content/themes/casper/ content/themes/
-git init
-cd content/themes/
-git submodule add https://github.com/curiositry/mnml-ghost-theme
-git submodule add https://github.com/zutrinken/attila/
-wget https://github.com/TryGhost/Source/archive/refs/tags/<last-version>.zip -O source.zip #check and use the lastest version https://github.com/TryGhost/Source/releases
-rm -R source
-unzip source.zip -d temp
-mkdir source
-mv temp/*/* source/
-rm -R temp source.zip
+The `mise.toml` file downloads Ghost, installs its production dependencies, seeds its default content and defines the `build` and `run` tasks automatically used by the Clever Cloud Linux runtime.
+
+## Create the application and add-ons
+
+Create a Linux application with an alias, then create and link MySQL 8.4, Cellar and FS Bucket add-ons:
+
+```bash
+clever create -t linux -a myGhost
+
+clever addon create mysql-addon myGhostMySQL -p xxs_sml --addon-version 8.4 -l myGhost
+clever addon create cellar-addon myGhostCellar -l myGhost
+clever addon create fs-bucket myGhostContent -l myGhost
 ```
 
-Add the S3 module to use Cellar S3:
-```sh
-npm install ghost-storage-adapter-s3
-mkdir -p ./content/adapters/storage
-cp -r ./node_modules/ghost-storage-adapter-s3 ./content/adapters/storage/s3
+Clever Tools targets your personal organisation by default. To use another organisation, add `--org ORGANISATION` or `-o ORGANISATION` to commands that support it.
+
+Display the application URL. You can also add a [custom domain](https://www.clever.cloud/developers/doc/administrate/domain-names/), which requires DNS configuration:
+
+```bash
+clever domain
+clever domain add your.website.tld
 ```
 
-### 2. Create and configure Node application and MySQL
+Mount the linked FS Bucket on the persistent Ghost content directory:
 
-User the [clever tools CLI](https://www.clever-cloud.com/developers/doc/cli/install)
-
-Create the Node.js app on Clever Cloud:
-```sh
-clever create --type node myblog
+```bash
+FS_BUCKET_HOST="$(clever env -F json | jq -er 'first(.fromAddons[] | select(.addonName == "myGhostContent") | .env[] | select(.name == "BUCKET_HOST") | .value)')"
+clever env set CC_FS_BUCKET "/content:${FS_BUCKET_HOST}"
+unset FS_BUCKET_HOST
 ```
 
-Create MySQL addon and link it to your Node.js application:
-```sh
-clever addon create mysql-addon --plan s_sml myblogsql
-clever service link-addon myblogsql
-```
-Ghost configuration file can't use direct environment variables.
-Set the following environment variables to connect your app to the database:
-```sh
-clever env set database__connection__host <ADDON_HOST>
-clever env set database__connection__user <ADDON_USER>
-clever env set database__connection__password <ADDON_PASSWORD>
-clever env set database__connection__database <ADDON_DATABASE>
-clever env set database__connection__port <ADDON_PORT>
-clever env set url https://<domain_URL_blog>
+The name-based lookup requires a unique add-on name. If several linked add-ons use the same name, use the add-on ID returned by `clever addon create` instead:
+
+```bash
+FS_BUCKET_HOST="$(clever addon env ADDON_ID -F json | jq -er '.BUCKET_HOST')"
 ```
 
-### 3. Install and configure Cellar S3 
+## Configure Cellar
 
-Create the Cellar S3 addon on Clever Cloud :
-```sh
-clever addon create cellar-addon --plan s_sml <cellar-app>
-clever service link-addon <cellar-app>
+Set the exact HTTPS origin returned by `clever domain`, without a trailing slash, and choose a globally unique bucket name containing only lowercase letters, numbers, dots and hyphens:
+
+```bash
+export GHOST_URL="https://your-ghost-domain.example.com"
+export GHOST_BUCKET="your-unique-ghost-bucket"
 ```
 
-On you Cellar S3 addon console, create a bucket for your blog.
+Load the Cellar credentials injected by the linked add-on and create the bucket:
 
-Add the environment variables to configure Ghost with Cellar:
-```sh
-clever env set storage__s3__accessKeyId <CELLAR_ACCESS_KEY>
-clever env set storage__s3__secretAccessKey <CELLAR_SECRET_KEY>
-clever ens set storage__s3__assetHost <CELLAR_ADDON_HOST>
-clever env set storage__s3__bucket <your-bucket>
-clever env set storage__s3__region fr
-```
-Set the public read access policy for your Cellar bucket ([documentation](https://www.clever-cloud.com/developers/doc/addons/cellar/#public-bucket-policy)) :
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": "s3:ListBucket",
-            "Resource": "arn:aws:s3:::<bucket>"
-        },
-        {
-            "Sid": "VisualEditor1",
-            "Effect": "Allow",
-            "Action": [
-                "s3:PutObject",
-                "s3:GetObject",
-                "s3:PutObjectVersionAcl",
-                "s3:DeleteObject",
-                "s3:PutObjectAcl"
-            ],
-            "Resource": "arn:aws:s3:::<bucket>/*"
-        },
-        {
-            "Sid": "PublicReadAccess",
-            "Effect": "Allow",
-            "Action": "s3:GetObject",
-            "Resource": "arn:aws:s3:::<bucket>/*",
-            "Principal": "*"
-        }
-    ]
-}
+```bash
+source <(clever env -F shell | grep '^export CELLAR_ADDON_')
+
+s3cmd --access_key="$CELLAR_ADDON_KEY_ID" \
+  --secret_key="$CELLAR_ADDON_KEY_SECRET" \
+  --host="$CELLAR_ADDON_HOST" \
+  --host-bucket="$CELLAR_ADDON_HOST" \
+  --ssl mb "s3://$GHOST_BUCKET"
 ```
 
-### 4. Create pre run hook
+Ghost returns direct URLs for uploaded assets, so visitors need public read access to bucket objects. Apply a policy that allows reads without allowing public writes or bucket listing:
 
-In the project's root folder, create file `.clevercloud-pre-run-hook.sh` :
-```sh
-#!/bin/sh
-npm install -g ghost-cli 
-mkdir ghost 
-cd ghost
-ghost install local 
-ghost stop
-cp ../config.production.json .
-npm install ghost-storage-adapter-s3
-mkdir -p ./content/adapters/storage
-cp -r ../content/adapters/storage/s3 content/adapters/storage/s3
-rm -R content/themes/source
-cp -r ../content/themes/source content/themes/
+```bash
+jq --null-input --arg bucket "$GHOST_BUCKET" '{
+  Version: "2012-10-17",
+  Statement: [{
+    Sid: "PublicRead",
+    Effect: "Allow",
+    Principal: "*",
+    Action: "s3:GetObject",
+    Resource: "arn:aws:s3:::\($bucket)/*"
+  }]
+}' > ghost-bucket-policy.json
+
+s3cmd --access_key="$CELLAR_ADDON_KEY_ID" \
+  --secret_key="$CELLAR_ADDON_KEY_SECRET" \
+  --host="$CELLAR_ADDON_HOST" \
+  --host-bucket="$CELLAR_ADDON_HOST" \
+  --ssl setpolicy ghost-bucket-policy.json "s3://$GHOST_BUCKET"
+
+rm ghost-bucket-policy.json
+unset CELLAR_ADDON_KEY_ID CELLAR_ADDON_KEY_SECRET CELLAR_ADDON_HOST
 ```
 
-Grant execution permission to the script:
-```sh
-sudo chmod +x clevercloud.sh
-```
+## Configure Ghost
 
-### 5. Configure Ghost
+Set the tested Ghost and Node.js versions, the public URL and the Cellar bucket name:
 
-Create the file `config.production.json` in the project's root folder:
-```json
-{
-  "url": "https://<your-url-app>/",
-  "server": {
-    "port": 8080,
-    "host": "0.0.0.0"
-  },
-  "database": {
-    "client": "mysql"
-  },
-  "storage": {
-    "active": "s3"
-  },
-  "mail": {
-    "transport": "SMTP"
-  },
-  "process": "local",
-  "logging": {
-    "level": "debug",
-    "transports": ["stdout"]
-  },
-  "paths": {
-    "contentPath": "../../../content/"
-  }
-}
-```
+```bash
+clever env set GHOST_VERSION 6.60.0
+clever env set CC_NODE_VERSION 22.23.1
 
-### 6. Create package.json and .gitignore
-
-Create `package.json`:
-```json
-{
-    "name": "ghost",
-    "version": "0.1.0",
-    "description": "",
-    "scripts": {
-        "start": "ghost run --dir ghost"
-    },
-    "devDependencies": {},
-    "dependencies": {}
-}
-```
-
-Create `.gitignore` :
-```
-.ghost-cli
-config.development.json
-current
-versions
-node_modules
-```
-
-### 7. Set other environment variables for your application
-
-Before deploying your application on Clever Cloud, make sure to set the following environment variables:
-```sh
-clever env set CC_NODE_BUILD_TOOL yarn2
-clever env set CC_NODE_VERSION 20
-clever env set CC_PRE_RUN_HOOK "./.clevercloud-pre-run-build.sh"
+clever env set GHOST_BUCKET "$GHOST_BUCKET"
 clever env set NODE_ENV production
+clever env set url "$GHOST_URL"
 ```
 
-Optional: Configure email service
+The linked add-ons provide their credentials to the application. The `mise.toml` file maps them to Ghost's nested configuration and configures its listening address, port and persistent storage.
 
-Ghost allows you to configure an SMTP service for sending emails (such as invitations, password resets, etc.). You can set it up using the following environment variables:
-```sh
-clever env set mail__from "your-email@example.com"
-clever env set mail__options__service "your-mail-service" # e.g. Mailgun, Gmail, etc.
-clever env set mail__options__host "smtp.yourmail.com"
-clever env set mail__options__port "587"
-clever env set mail__options__secureConnection "false"
-clever env set mail__options__auth__user "your-smtp-username"
-clever env set mail__options__auth__pass "your-smtp-password"
-```
-> 💡 **Note**: These environment variables allow Ghost to connect to your email service automatically.  
-> For more details and supported options, see the [official Ghost SMTP configuration docs](https://ghost.org/docs/config/#mail).
+### Configure email
 
-### 8. Deploy on Clever Cloud
+Ghost requires transactional email for invitations, password resets, member sign-ins and Admin verification on new devices. Configure the SMTP service of your choice and replace every example value with your provider's settings:
 
-Initialize git, add files and push:
-```sh
-git add clevercloud.sh package.json config.production.json content
-git commit -m "Initial commit"
-git remote add clever <CLEVER_GIT_URL>
-git push
+```bash
+clever env set mail__transport SMTP
+clever env set mail__from "Ghost <ghost@your.website.tld>"
+clever env set mail__options__host smtp.example.com
+clever env set mail__options__port 465
+clever env set mail__options__secure true
+clever env set mail__options__auth__user SMTP_USERNAME
+clever env set mail__options__auth__pass A_STRONG_SMTP_PASSWORD
 ```
 
-## More information
+See the [Ghost mail configuration](https://docs.ghost.org/config/#mail) for provider-specific options. Transactional email works with standard SMTP services, but Ghost's built-in bulk newsletter delivery [requires Mailgun](https://docs.ghost.org/newsletters/#bulk-email-configuration).
 
-For a small blog, you can use XS or S Node.js plan.
+If SMTP is not available during the initial setup, temporarily disable Admin verification on new devices:
+
+```bash
+clever env set security__staffDeviceVerification false
+```
+
+Before using Ghost in production, configure SMTP, re-enable device verification and restart the application:
+
+```bash
+clever env set security__staffDeviceVerification true
+clever restart
+```
+
+## Deploy Ghost
+
+Deploy the application:
+
+```bash
+clever deploy
+```
+
+Open the application and append `/ghost` to its URL to create the publication owner account:
+
+```bash
+clever open
+```
+
+The public publication is available at `$GHOST_URL`, while Admin is available at `$GHOST_URL/ghost`.
+
+## Update Ghost
+
+Export your content from Ghost Admin and create a recent [MySQL backup](https://www.clever.cloud/developers/doc/cli/addons/#database-backups) before updating. Check the target release's [`engines.node` requirement](https://github.com/TryGhost/Ghost/blob/v6.60.0/ghost/core/package.json), update both version variables when necessary, then rebuild without the deployment cache. For example:
+
+```bash
+clever env set GHOST_VERSION 6.60.0
+clever env set CC_NODE_VERSION 22.23.1
+clever restart --without-cache
+```
+
+The rebuild downloads the selected release and installs its production dependencies. Ghost applies pending MySQL migrations when the new version starts, while MySQL, Cellar and the FS Bucket preserve the publication data.
+
+## Contributing
+
+Contributions that improve this deployment example are welcome. Open an issue or submit a pull request with your proposed changes.
