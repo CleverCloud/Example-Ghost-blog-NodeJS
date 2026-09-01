@@ -1,6 +1,0 @@
-[submodule "content/themes/mnml-ghost-theme"]
-	path = content/themes/mnml-ghost-theme
-	url = https://github.com/curiositry/mnml-ghost-theme
-[submodule "content/themes/attila"]
-	path = content/themes/attila
-	url = https://github.com/zutrinken/attila/
